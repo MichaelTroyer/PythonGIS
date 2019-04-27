@@ -72,3 +72,5 @@ class VectorData(object):
                 new.spindex = self.spindex.copy()
             return new
 
+class Feature(object):
+    pass
