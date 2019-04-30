@@ -9,18 +9,24 @@ def from_file(filepath, encoding="utf8"):
     def decode(value):
         if isinstance(value, str): 
             return value.decode(encoding)
-        else: return value
+        else:
+            return value
     
     # shapefile
-    if filepath.endswith(".shp"):
+    if filepath.lower().endswith(".shp"):
         shapereader = pyshp.Reader(filepath)
         
         # load fields, rows, and geometries
-        fields = [decode(fieldinfo[0]) for fieldinfo in shapereader.fields[1:]]
+        # Field name is first value in field, first value in shapereader is delete flag
+        fields = [decode(field[0]) for field in shapereader.fields[1:]]
         rows = [ [decode(value) for value in record] for record in shapereader.iterRecords()]
         def getgeoj(obj):
+            """ Get list of geojson features and capture bbox if alreaday calculated"""
+            # .__Geo_interface__ returns geojson dict
             geoj = obj.__geo_interface__
-            if hasattr(obj, "bbox"): geoj["bbox"] = obj.bbox
+            # Shapefiles store feature bounding boxes - except points obvy
+            if hasattr(obj, "bbox"):
+                geoj["bbox"] = obj.bbox
             return geoj
         geometries = [getgeoj(shape) for shape in shapereader.iterShapes()]
         
@@ -32,7 +38,7 @@ def from_file(filepath, encoding="utf8"):
         return fields, rows, geometries, crs
 
     # geojson file
-    elif filepath.endswith((".geojson",".json")):
+    elif filepath.lower().endswith((".geojson",".json")):
         geojfile = pygeoj.load(filepath)
 
         # load fields, rows, and geometries
@@ -46,7 +52,10 @@ def from_file(filepath, encoding="utf8"):
         return fields, rows, geometries, crs
     
     else:
-        raise Exception("Could not create vector data from the given filepath: the filetype extension is either missing or not supported")
+        raise Exception(
+            "Could not create vector data from the given filepath:"
+            " the filetype extension is either missing or not supported"
+            )
 
 
 
