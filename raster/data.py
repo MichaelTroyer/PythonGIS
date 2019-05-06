@@ -12,12 +12,24 @@ class Cell(object):
         self.band = band
         self.row, self.col = row, col
 
-        def __repr__(self):
-            return "Cell(col={}, row={}, value={}".format(self.col, self.row, self.value)
+    def __repr__(self):
+        return "Cell(col={}, row={}, value={}".format(self.col, self.row, self.value)
 
-        @property
-        def value(self):
-            return self.band.cells[self.col, self.row]
+    @property
+    def value(self):
+        return self.band.cells[self.col, self.row]
+
+    @property
+    def neighbours(self):
+        nw = Cell(self.band, self.col - 1, self.row + 1)
+        n = Cell(self.band, self.col, self.row + 1)
+        ne = Cell(self.band, self.col + 1, self.row + 1)
+        e = Cell(self.band, self.col + 1, self.row)
+        se = Cell(self.band, self.col + 1, self.row - 1)
+        s = Cell(self.band, self.col, self.row - 1)
+        sw = Cell(self.band, self.col - 1, self.row - 1)
+        w = Cell(self.band, self.col - 1, self.row)
+        return [nw,n,ne,e,se,s,sw,w]
 
 
 class Band(object):
@@ -161,3 +173,41 @@ class RasterData(object):
             band.cells = band.img.load()
 
         return new_raster, mask_trans
+
+    @property
+    def mask(self):
+        if hasattr(self, "_cached_mask"):
+            return self._cached_mask
+        else:
+            nodata = self.info.get("nodata_value")
+            if nodata != None:
+                # mask out the nodata
+                if self.bands[0].img.mode in ("F", "I"):
+                    # if 32bit float or int values, need to chech each one
+                    mask = PIL.Image.new("1", (self.width, self.height), 1)
+                    px = mask.load()
+                    for col in xrange(self.width):
+                        for row in xrange(self.height):
+                            value = (band.cells[col, row] for band in self.bands)
+                            # mask if all bands have no data
+                            if all((val == nodata for val in value)):
+                                px[col, row] = 0
+                else:
+                    # Use the faster point method
+                    masks = []
+                    for band in self.bands:
+                        mask = band.img.point(lambda px: 1 if px != nodata else 0, "1")
+                        masks.append(mask)
+                    # Mask out where all bands have nodata value
+                    masks_namedict = dict(["mask%i"%i, mask) for i, mask in enumerate(masks)])   
+                    expr = " & ".join(masks_namedict.keys())
+                    mask = PIL.ImageMath.eval(expr, **masks_namedict).convert("1")
+            else:
+                # Even if no nodata, need to create mask to prevent infininte outside border after geotransform
+                nodata = 0
+                mask = PIL.Image.new("1", self.bands[0].img.size, 1)
+            self._cached_mask = mask
+            return self._cached_mask
+
+    def save(self, filepath):
+        saver.to_file(self.bands, self.info, filepath)
